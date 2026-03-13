@@ -19,17 +19,20 @@ def disparar_alerta_didatico(mercado, jogo_info, odd_minima, odd_atual, prob_ia,
     prob_casa = (1 / odd_atual) * 100 
     prob_nossa = prob_ia * 100 
     
+    # Captura a casa dinamicamente (fallback para Bet365 se houver erro)
+    nome_casa = jogo_info.get('casa_de_aposta', 'Bet365')
+    
     texto = (
         f"🚨 *ALERTA DE APOSTA: {mercado}* 🚨\n\n"
         f"⚽ *Jogo:* {jogo_info['time_casa']} x {jogo_info['time_fora']}\n\n"
         f"🎯 *O QUE VOCÊ DEVE FAZER AGORA:*\n👉 *{acao_direta}*\n\n"
         f"💡 *Por que apostar nisso?*\n{explicacao_simples}\n\n"
         f"📊 *A Matemática:*\n"
-        f"A Bet365 dá *{prob_casa:.1f}%* de chance (Odd {odd_atual:.2f}).\n"
+        f"A casa *{nome_casa}* dá *{prob_casa:.1f}%* de chance (Odd {odd_atual:.2f}).\n"
         f"A nossa IA calcula a chance real em *{prob_nossa:.1f}%*!\n"
         f"Temos vantagem matemática contra a casa.\n\n"
         f"💰 *Gestão de Banca:* Aposte R$ {VALOR_UNIDADE:.2f} (1 Unidade)\n"
-        f"📱 *Na Bet365:* {instrucao_bet365}"
+        f"📱 *Onde Apostar:* {nome_casa} -> {instrucao_bet365}"
     )
     bot.send_message(chat_id, texto)
 
