@@ -9,8 +9,10 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 LEAGUE_ID = int(os.getenv("LEAGUE_ID", 71))
 SEASON = int(os.getenv("SEASON", 2024))
 
-BASE_URL = "https://api-football-v1.p.rapidapi.com/v3"
+# ---------------------------------------------------------
+# CONEXÃO DIRETA API-SPORTS (Sem passar pelo RapidAPI)
+# ---------------------------------------------------------
+BASE_URL = "https://v3.football.api-sports.io"
 HEADERS = {
-    "X-RapidAPI-Key": API_KEY,
-    "X-RapidAPI-Host": "api-football-v1.p.rapidapi.com"
+    "x-apisports-key": API_KEY
 }
