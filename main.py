@@ -1,11 +1,19 @@
 import telebot
 import pandas as pd
+import time
 from src.config import TELEGRAM_TOKEN
 from src.api_client import coletar_dados_api
 from src.model import treinar_cerebro
 
-bot = telebot.TeleBot(TELEGRAM_TOKEN, parse_mode="Markdown")
-VALOR_UNIDADE = 50.00 
+# Inicialização com Log
+print("🚀 Iniciando Bot Sniper V8...")
+try:
+    bot = telebot.TeleBot(TELEGRAM_TOKEN, parse_mode="Markdown")
+    VALOR_UNIDADE = 50.00 
+    print("✅ Token do Telegram validado!")
+except Exception as e:
+    print(f"❌ Erro ao inicializar Bot: {e}")
+    exit(1)
 
 def disparar_alerta_didatico(mercado, jogo_info, odd_minima, odd_atual, prob_ia, acao_direta, explicacao_simples, instrucao_bet365, chat_id):
     prob_casa = (1 / odd_atual) * 100 
@@ -27,36 +35,45 @@ def disparar_alerta_didatico(mercado, jogo_info, odd_minima, odd_atual, prob_ia,
 
 @bot.message_handler(commands=['start'])
 def enviar_boas_vindas(message):
+    print(f"👤 Comando /start recebido de {message.from_user.first_name}")
     bot.reply_to(message, "🤖 *Sniper Betting AI V8 (Web Scraper) Ativado!*\n\nAgora busco jogos diretamente em fontes públicas da web, sem limites de API.\n\nDigite /analisar para iniciar a varredura.")
 
 @bot.message_handler(commands=['analisar'])
 def executar_analise_telegram(message):
     chat_id = message.chat.id
+    print(f"📊 Comando /analisar recebido. Iniciando processamento...")
     bot.reply_to(message, "⏳ *Iniciando Raspagem Web e Análise Matemática...*")
     
     total_alertas_global = 0
 
     try:
         df = coletar_dados_api()
-        if df.empty:
+        if df is None or df.empty:
+            print("⚠️ Scraper retornou DataFrame vazio.")
             bot.send_message(chat_id, "📉 Nenhum dado coletado pelo scraper no momento.")
             return
+
+        print(f"✅ Dados coletados: {len(df)} partidas.")
 
         # Separação: Passado vs Futuro
         df_treino = df[df['status'] == 'FT'].copy()
         df_futuro = df[df['status'] == 'NS'].copy()
+
+        print(f"📈 Treino: {len(df_treino)} | Previsão: {len(df_futuro)}")
 
         if df_futuro.empty:
             bot.send_message(chat_id, "📉 Não há jogos futuros agendados para análise no momento.")
             return
 
         # Execução dos Especialistas
+        print("🧠 Treinando Especialistas de IA...")
         res1 = treinar_cerebro(df_treino, df_futuro, "RESULTADO", ['xg_diff', 'posse_ataque'], 'resultado_casa', 'odd_casa')
         res2 = treinar_cerebro(df_treino, df_futuro, "REMATES", ['remates_p90', 'concessao_adv'], 'remates_over_2_5', 'odd_remates_over_2_5')
         res3 = treinar_cerebro(df_treino, df_futuro, "CARTÕES", ['media_arbitro', 'tensao'], 'cartoes_over_4_5', 'odd_cartoes_over_4_5')
 
         # Processar resultados do Cérebro 1
         if not res1[4].empty:
+            print(f"🎯 Alertas VITÓRIA: {len(res1[4])}")
             for i in range(len(res1[4])):
                 disparar_alerta_didatico("VITÓRIA", res1[4].iloc[i], 0, res1[2].iloc[i], res1[3][i], 
                     f"Vitória do {res1[4].iloc[i]['time_casa']}", "Padrão estatístico favorável ao mandante.", 
@@ -65,6 +82,7 @@ def executar_analise_telegram(message):
 
         # Processar resultados do Cérebro 2
         if not res2[4].empty:
+            print(f"🎯 Alertas CHUTES: {len(res2[4])}")
             for i in range(len(res2[4])):
                 disparar_alerta_didatico("CHUTES", res2[4].iloc[i], 0, res2[2].iloc[i], res2[3][i], 
                     "Mais de 2.5 Chutes", "Alta probabilidade de jogo aberto.", 
@@ -73,6 +91,7 @@ def executar_analise_telegram(message):
 
         # Processar resultados do Cérebro 3
         if not res3[4].empty:
+            print(f"🎯 Alertas CARTÕES: {len(res3[4])}")
             for i in range(len(res3[4])):
                 disparar_alerta_didatico("CARTÕES", res3[4].iloc[i], 0, res3[2].iloc[i], res3[3][i], 
                     "Mais de 4.5 Cartões", "Jogo tenso com árbitro rigoroso.", 
@@ -86,7 +105,14 @@ def executar_analise_telegram(message):
     if total_alertas_global == 0:
         bot.send_message(chat_id, "📉 Varredura concluída. Nenhuma oportunidade +EV encontrada hoje.")
     else:
+        print(f"🏁 Análise finalizada. {total_alertas_global} alertas enviados.")
         bot.send_message(chat_id, f"✅ *ANÁLISE CONCLUÍDA!*\n\nEncontrei {total_alertas_global} oportunidades lucrativas.")
 
 if __name__ == "__main__":
-    bot.infinity_polling()
+    print("🤖 Bot rodando. Acesse o Telegram e digite /analisar")
+    while True:
+        try:
+            bot.infinity_polling()
+        except Exception as e:
+            print(f"⚠️ Erro no polling: {e}. Reiniciando em 5 segundos...")
+            time.sleep(5)
