@@ -115,7 +115,7 @@ if __name__ == "__main__":
     print("🤖 Bot rodando. Acesse o Telegram e digite /analisar")
     while True:
         try:
-            bot.infinity_polling()
+            bot.infinity_polling(timeout=60, long_polling_timeout=60)
         except Exception as e:
             print(f"⚠️ Erro no polling: {e}. Reiniciando em 5 segundos...")
             time.sleep(5)
