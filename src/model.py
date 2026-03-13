@@ -1,57 +1,54 @@
 import xgboost as xgb
+import numpy as np
+import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
-import pandas as pd
 
-class BettingExpert:
-    def __init__(self, name, features):
-        self.name = name
-        self.features = features
-        self.model = xgb.XGBClassifier(n_estimators=100, learning_rate=0.1, max_depth=4, eval_metric='logloss')
+def calcular_roi(y_true, odds, prob_prevista, margem_seguranca=0.03):
+    """Calcula o +EV garantindo que a aposta só ocorra se a odd da casa for desajustada."""
+    prob_implicita = 1 / odds
+    
+    # REGRA DE OURO +EV: Probabilidade da IA > Probabilidade da Casa
+    apostar_mask = prob_prevista > (prob_implicita + margem_seguranca)
+    
+    apostas_feitas = y_true[apostar_mask]
+    odds_apostadas = odds[apostar_mask]
+    
+    unidades_investidas = len(apostas_feitas)
+    retorno = np.where(apostas_feitas == 1, odds_apostadas - 1, -1)
+    lucro = retorno.sum()
+    roi = (lucro / unidades_investidas) * 100 if unidades_investidas > 0 else 0
+    
+    return unidades_investidas, lucro, roi, apostar_mask
 
-    def treinar(self, df, target):
-        X = df[self.features]
-        y = df[target]
-        
-        # Split para validação
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
-        self.model.fit(X_train, y_train)
-        
-        preds = self.model.predict(X_test)
-        probas = self.model.predict_proba(X_test)[:, 1]
-        acc = accuracy_score(y_test, preds)
-        
-        return acc, probas, y_test
+def treinar_cerebro(df_treino, df_futuro, nome_mercado, features, target, col_odd):
+    """Treina com o passado (FT) e prevê o futuro (NS)."""
+    print(f"\nTreinando Cérebro: {nome_mercado}...")
+    
+    # Validação de classes no treino
+    if df_treino[target].nunique() < 2:
+        print(f"⚠️ Aviso [{nome_mercado}]: Dados de treino sem variação. Pulando...")
+        return None, pd.DataFrame(), pd.Series(), pd.Series(), pd.DataFrame()
 
-def treinar_cerebro(df, nome, features, target, col_odd):
-    """
-    Função de conveniência para o pipeline principal.
-    Retorna o modelo, X_test, Odds, Probabilidades e o DataFrame original correspondente.
-    """
-    expert = BettingExpert(nome, features)
+    # 1. Treino (Passado)
+    X_train = df_treino[features]
+    y_train = df_treino[target]
     
-    X = df[features]
-    y = df[target]
+    modelo = xgb.XGBClassifier(n_estimators=100, learning_rate=0.05, max_depth=3, eval_metric='logloss')
+    modelo.fit(X_train, y_train)
     
-    # Treinamos com tudo para prever o próximo (ou usamos split para simular)
-    # Para o bot, vamos retornar a previsão do jogo mais recente (última linha)
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
-    expert.model.fit(X_train, y_train)
-    
-    probas = expert.model.predict_proba(X_test)[:, 1]
-    
-    # Retornamos os dados do conjunto de teste para o bot exibir
-    df_test = df.iloc[X_test.index]
-    odds_test = df_test[col_odd]
-    
-    return expert.model, X_test, odds_test, probas, df_test
+    # 2. Previsão (Futuro) - Se não houver jogos futuros, retorna vazio
+    if df_futuro.empty:
+        return modelo, pd.DataFrame(), pd.Series(), pd.Series(), pd.DataFrame()
 
-def inicializar_especialistas():
-    """
-    Cria os 3 cérebros especializados (Legado V2).
-    """
-    experto_resultado = BettingExpert("Resultado Final", ['xg_diff', 'posse_ataque'])
-    experto_tatico = BettingExpert("Tático (Remates)", ['remates_p90', 'concessao_adv'])
-    experto_disciplinar = BettingExpert("Disciplinar (Cartões)", ['media_arbitro', 'tensao'])
+    # Filtrar apenas as colunas necessárias para o X_futuro
+    X_futuro = df_futuro[features]
+    odds_futuro = df_futuro[col_odd]
     
-    return experto_resultado, experto_tatico, experto_disciplinar
+    prob_prevista = modelo.predict_proba(X_futuro)[:, 1]
+    
+    # Filtra apenas as apostas de valor no futuro
+    prob_implicita = 1 / odds_futuro
+    mask_valor = prob_prevista > (prob_implicita + 0.03) # 3% de margem de segurança
+    
+    return modelo, X_futuro[mask_valor], odds_futuro[mask_valor], prob_prevista[mask_valor], df_futuro[mask_valor]
