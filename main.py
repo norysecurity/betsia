@@ -27,68 +27,66 @@ def disparar_alerta_didatico(mercado, jogo_info, odd_minima, odd_atual, prob_ia,
 
 @bot.message_handler(commands=['start'])
 def enviar_boas_vindas(message):
-    bot.reply_to(message, "🤖 *Sniper Bet365 Ativado!*\n\nAnaliso os jogos que VÃO ACONTECER hoje e amanhã. Digite /analisar para iniciar.")
+    bot.reply_to(message, "🤖 *Sniper Betting AI V8 (Web Scraper) Ativado!*\n\nAgora busco jogos diretamente em fontes públicas da web, sem limites de API.\n\nDigite /analisar para iniciar a varredura.")
 
 @bot.message_handler(commands=['analisar'])
 def executar_analise_telegram(message):
     chat_id = message.chat.id
-    bot.reply_to(message, "⏳ *Analisando o mercado futuro...* Buscando falhas na Bet365.")
+    bot.reply_to(message, "⏳ *Iniciando Raspagem Web e Análise Matemática...*")
     
+    total_alertas_global = 0
+
     try:
         df = coletar_dados_api()
         if df.empty:
-            bot.send_message(chat_id, "❌ Erro ao baixar dados.")
+            bot.send_message(chat_id, "📉 Nenhum dado coletado pelo scraper no momento.")
             return
 
-        # Separação crucial: Treino (Passado) vs Previsão (Futuro)
+        # Separação: Passado vs Futuro
         df_treino = df[df['status'] == 'FT'].copy()
         df_futuro = df[df['status'] == 'NS'].copy()
 
         if df_futuro.empty:
-             bot.send_message(chat_id, "📉 Não há jogos futuros agendados para análise no momento.")
-             return
+            bot.send_message(chat_id, "📉 Não há jogos futuros agendados para análise no momento.")
+            return
 
-        # Execução dos 3 Cérebros
-        mod1, x1, odd1, prob1, prev1 = treinar_cerebro(df_treino, df_futuro, "RESULTADO FINAL", ['xg_diff', 'posse_ataque'], 'resultado_casa', 'odd_casa')
-        mod2, x2, odd2, prob2, prev2 = treinar_cerebro(df_treino, df_futuro, "REMATES JOGADOR", ['remates_p90', 'concessao_adv'], 'remates_over_2_5', 'odd_remates_over_2_5')
-        mod3, x3, odd3, prob3, prev3 = treinar_cerebro(df_treino, df_futuro, "CARTÕES", ['media_arbitro', 'tensao'], 'cartoes_over_4_5', 'odd_cartoes_over_4_5')
+        # Execução dos Especialistas
+        res1 = treinar_cerebro(df_treino, df_futuro, "RESULTADO", ['xg_diff', 'posse_ataque'], 'resultado_casa', 'odd_casa')
+        res2 = treinar_cerebro(df_treino, df_futuro, "REMATES", ['remates_p90', 'concessao_adv'], 'remates_over_2_5', 'odd_remates_over_2_5')
+        res3 = treinar_cerebro(df_treino, df_futuro, "CARTÕES", ['media_arbitro', 'tensao'], 'cartoes_over_4_5', 'odd_cartoes_over_4_5')
 
-        alertas = 0
-        if not prev1.empty:
-            for i in range(len(prev1)):
-                jogo = prev1.iloc[i]
-                disparar_alerta_didatico("VITÓRIA DO MANDANTE", jogo, 1/prob1[i], odd1.iloc[i], prob1[i], 
-                    f"APOSTE NA VITÓRIA DO {jogo['time_casa'].upper()}", 
-                    f"O time do {jogo['time_casa']} domina as métricas ofensivas neste confronto.", 
-                    "Aba 'Resultado Final' -> Time da Casa", chat_id)
-                alertas += 1
-            
-        if not prev2.empty:
-            for i in range(len(prev2)):
-                jogo = prev2.iloc[i]
-                disparar_alerta_didatico("CHUTES AO GOL", jogo, 1/prob2[i], odd2.iloc[i], prob2[i], 
-                    "APOSTE EM MAIS DE 2.5 CHUTES DO ATACANTE", 
-                    f"A defesa do {jogo['time_fora']} permite muitas finalizações de fora da área.", 
-                    "Aba 'Jogador - Chutes ao Golo' -> Mais de 2.5", chat_id)
-                alertas += 1
+        # Processar resultados do Cérebro 1
+        if not res1[4].empty:
+            for i in range(len(res1[4])):
+                disparar_alerta_didatico("VITÓRIA", res1[4].iloc[i], 0, res1[2].iloc[i], res1[3][i], 
+                    f"Vitória do {res1[4].iloc[i]['time_casa']}", "Padrão estatístico favorável ao mandante.", 
+                    "Aba 'Resultado Final'", chat_id)
+                total_alertas_global += 1
 
-        if not prev3.empty:
-            for i in range(len(prev3)):
-                jogo = prev3.iloc[i]
-                disparar_alerta_didatico("TOTAL DE CARTÕES", jogo, 1/prob3[i], odd3.iloc[i], prob3[i], 
-                    "APOSTE EM MAIS DE 4.5 CARTÕES", 
-                    "Árbitro rigoroso apitando um jogo com alto índice de tensão.", 
-                    "Aba 'Cartões' -> Partida/Mais de 4.5", chat_id)
-                alertas += 1
+        # Processar resultados do Cérebro 2
+        if not res2[4].empty:
+            for i in range(len(res2[4])):
+                disparar_alerta_didatico("CHUTES", res2[4].iloc[i], 0, res2[2].iloc[i], res2[3][i], 
+                    "Mais de 2.5 Chutes", "Alta probabilidade de jogo aberto.", 
+                    "Aba 'Estatísticas de Jogador'", chat_id)
+                total_alertas_global += 1
 
-        if alertas == 0:
-            bot.send_message(chat_id, "📉 O mercado está justo. Nenhuma Aposta de Valor (+EV) encontrada nos jogos futuros. Dinheiro protegido.")
-        else:
-            bot.send_message(chat_id, f"✅ Análise concluída! Te mandei {alertas} ordens de apostas.")
+        # Processar resultados do Cérebro 3
+        if not res3[4].empty:
+            for i in range(len(res3[4])):
+                disparar_alerta_didatico("CARTÕES", res3[4].iloc[i], 0, res3[2].iloc[i], res3[3][i], 
+                    "Mais de 4.5 Cartões", "Jogo tenso com árbitro rigoroso.", 
+                    "Aba 'Cartões'", chat_id)
+                total_alertas_global += 1
 
     except Exception as e:
-        bot.send_message(chat_id, f"❌ Erro: {e}")
+        print(f"❌ Erro na análise: {e}")
+        bot.send_message(chat_id, f"❌ Erro na execução: {str(e)}")
+
+    if total_alertas_global == 0:
+        bot.send_message(chat_id, "📉 Varredura concluída. Nenhuma oportunidade +EV encontrada hoje.")
+    else:
+        bot.send_message(chat_id, f"✅ *ANÁLISE CONCLUÍDA!*\n\nEncontrei {total_alertas_global} oportunidades lucrativas.")
 
 if __name__ == "__main__":
-    print("🤖 Bot rodando. Acesse o Telegram e digite /analisar")
     bot.infinity_polling()
