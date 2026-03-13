@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  betting_ai:
+    build: .
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+      - API_FOOTBALL_KEY=${API_FOOTBALL_KEY}
+      - LEAGUE_ID=${LEAGUE_ID}
+      - SEASON=${SEASON}
