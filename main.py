@@ -1,6 +1,7 @@
 import telebot
 import pandas as pd
 import time
+from telebot.apihelper import ApiTelegramException
 from src.config import TELEGRAM_TOKEN
 from src.api_client import coletar_dados_api
 from src.model import treinar_cerebro
@@ -14,6 +15,23 @@ try:
 except Exception as e:
     print(f"❌ Erro ao inicializar Bot: {e}")
     exit(1)
+
+def safe_send_message(chat_id, text, **kwargs):
+    """Envia mensagem tratando o erro 429 (Rate Limit) do Telegram."""
+    try:
+        return bot.send_message(chat_id, text, **kwargs)
+    except ApiTelegramException as e:
+        if e.error_code == 429:
+            retry_after = int(e.result_json.get('parameters', {}).get('retry_after', 30))
+            print(f"⚠️ Rate Limit atingido! Aguardando {retry_after} segundos...")
+            time.sleep(retry_after + 1)
+            return bot.send_message(chat_id, text, **kwargs)
+        else:
+            print(f"❌ Erro na API do Telegram: {e}")
+            raise e
+    except Exception as e:
+        print(f"❌ Erro inesperado ao enviar mensagem: {e}")
+        raise e
 
 def disparar_alerta_didatico(mercado, jogo_info, odd_minima, odd_atual, prob_ia, acao_direta, explicacao_simples, instrucao_bet365, chat_id):
     prob_casa = (1 / odd_atual) * 100 
@@ -34,12 +52,12 @@ def disparar_alerta_didatico(mercado, jogo_info, odd_minima, odd_atual, prob_ia,
         f"💰 *Gestão de Banca:* Aposte R$ {VALOR_UNIDADE:.2f} (1 Unidade)\n"
         f"📱 *Onde Apostar:* {nome_casa} -> {instrucao_bet365}"
     )
-    bot.send_message(chat_id, texto)
+    safe_send_message(chat_id, texto)
 
 @bot.message_handler(commands=['start'])
 def enviar_boas_vindas(message):
     print(f"👤 Comando /start recebido de {message.from_user.first_name}")
-    bot.reply_to(message, "🤖 *Sniper Betting AI V8 (Web Scraper) Ativado!*\n\nAgora busco jogos diretamente em fontes públicas da web, sem limites de API.\n\nDigite /analisar para iniciar a varredura.")
+    safe_send_message(message.chat.id, "🤖 *Sniper Betting AI V8 (Web Scraper) Ativado!*\n\nAgora busco jogos diretamente em fontes públicas da web, sem limites de API.\n\nDigite /analisar para iniciar a varredura.")
 
 @bot.message_handler(commands=['analisar'])
 def executar_analise_telegram(message):
@@ -53,7 +71,7 @@ def executar_analise_telegram(message):
         df = coletar_dados_api()
         if df is None or df.empty:
             print("⚠️ Scraper retornou DataFrame vazio.")
-            bot.send_message(chat_id, "📉 Nenhum dado coletado pelo scraper no momento.")
+            safe_send_message(chat_id, "📉 Nenhum dado coletado pelo scraper no momento.")
             return
 
         print(f"✅ Dados coletados: {len(df)} partidas.")
@@ -65,7 +83,7 @@ def executar_analise_telegram(message):
         print(f"📈 Treino: {len(df_treino)} | Previsão: {len(df_futuro)}")
 
         if df_futuro.empty:
-            bot.send_message(chat_id, "📉 Não há jogos futuros agendados para análise no momento.")
+            safe_send_message(chat_id, "📉 Não há jogos futuros agendados para análise no momento.")
             return
 
         # Execução dos Especialistas
@@ -82,6 +100,7 @@ def executar_analise_telegram(message):
                     f"Vitória do {res1[4].iloc[i]['time_casa']}", "Padrão estatístico favorável ao mandante.", 
                     "Aba 'Resultado Final'", chat_id)
                 total_alertas_global += 1
+                time.sleep(0.5) # Anti-spam preventivo
 
         # Processar resultados do Cérebro 2
         if not res2[4].empty:
@@ -91,6 +110,7 @@ def executar_analise_telegram(message):
                     "Mais de 2.5 Chutes", "Alta probabilidade de jogo aberto.", 
                     "Aba 'Estatísticas de Jogador'", chat_id)
                 total_alertas_global += 1
+                time.sleep(0.5) # Anti-spam preventivo
 
         # Processar resultados do Cérebro 3
         if not res3[4].empty:
@@ -100,16 +120,20 @@ def executar_analise_telegram(message):
                     "Mais de 4.5 Cartões", "Jogo tenso com árbitro rigoroso.", 
                     "Aba 'Cartões'", chat_id)
                 total_alertas_global += 1
+                time.sleep(0.5) # Anti-spam preventivo
 
     except Exception as e:
         print(f"❌ Erro na análise: {e}")
-        bot.send_message(chat_id, f"❌ Erro na execução: {str(e)}")
+        try:
+            safe_send_message(chat_id, f"❌ Erro na execução: {str(e)}")
+        except:
+            pass
 
     if total_alertas_global == 0:
-        bot.send_message(chat_id, "📉 Varredura concluída. Nenhuma oportunidade +EV encontrada hoje.")
+        safe_send_message(chat_id, "📉 Varredura concluída. Nenhuma oportunidade +EV encontrada hoje.")
     else:
         print(f"🏁 Análise finalizada. {total_alertas_global} alertas enviados.")
-        bot.send_message(chat_id, f"✅ *ANÁLISE CONCLUÍDA!*\n\nEncontrei {total_alertas_global} oportunidades lucrativas.")
+        safe_send_message(chat_id, f"✅ *ANÁLISE CONCLUÍDA!*\n\nEncontrei {total_alertas_global} oportunidades lucrativas.")
 
 if __name__ == "__main__":
     print("🤖 Bot rodando. Acesse o Telegram e digite /analisar")
