@@ -1,4 +1,6 @@
 import os
+import sys
+import time
 import requests
 import pandas as pd
 import numpy as np
@@ -38,56 +40,85 @@ def disparar_alerta_telegram(mercado, jogo_info, odd_minima, odd_atual, prob_ia,
         print(f"❌ Falha de conexão com o Telegram: {e}")
 
 def executar_pipeline_v2():
-    print("=== BETTING AI - PRODUÇÃO (V2) ===")
+    print("\n--- INICIANDO ANÁLISE DE MERCADO ---")
     
     # 1. Inicialização dos Cérebro Especialistas
     brain_res, brain_tat, brain_dis = inicializar_especialistas()
 
     # 2. Coleta de Dados REAIS
-    print(f"1. Coletando dados reais da Liga {LEAGUE_ID}...")
     df_base = coletar_dados_multimercado()
     
     if df_base.empty:
-        print("Aviso: Nenhum dado retornado da API. Verifique sua chave ou limite.")
+        print("Aviso: Nenhum dado retornado da API.")
         return
 
     # 3. Execução do Cérebro 1: Resultado Final
-    print("2. Ativando Cérebro de Resultado Final...")
     df_res = criar_features_resultado(df_base)
-    # Target: resultado_casa (vitória simples)
     acc_res, probas_res, _ = brain_res.treinar(df_res, 'resultado_casa')
     
-    # Exemplo de Alerta - No mundo real, iteramos sobre as previsões positivas
     if len(probas_res) > 0:
-        index_jogo = -1 # Último jogo processado
+        index_jogo = -1 
         info_jogo = df_res.iloc[index_jogo]
         prob_vitoria = probas_res[index_jogo]
         
-        # Lógica de Value Betting: Probabilidade IA > Probabilidade Implícita (1/Odd)
-        if prob_vitoria > (1/1.80 + 0.05): # Mock de Odd 1.80
+        if prob_vitoria > (1/1.80 + 0.05): # Mock de Odd
             disparar_alerta_telegram("RESULTADO", {
                 'time_casa': info_jogo['time_casa'],
                 'time_fora': info_jogo['time_fora']
             }, 1.45, 1.80, prob_vitoria, "Selecione 'Vencer Jogo' na aba Principal.")
 
     # 4. Execução do Cérebro 2: Tático (Remates)
-    print("\n3. Ativando Cérebro Tático (Estatísticas de Jogadores)...")
-    df_tat = criar_features_taticas(df_base) # Simplificando para o pipeline rodar com colunas sintéticas da API
-    
+    df_tat = criar_features_taticas(df_base)
     disparar_alerta_telegram("JOGADOR", {
         'time_casa': df_base.iloc[-1]['time_casa'],
         'time_fora': df_base.iloc[-1]['time_fora']
     }, 1.60, 1.85, 0.68, "Vá à aba 'Jogador - Chutes ao Gol'.")
 
     # 5. Execução do Cérebro 3: Disciplinar (Cartões)
-    print("\n4. Ativando Cérebro Disciplinar (Arbitragem)...")
     disparar_alerta_telegram("CARTÕES", {
         'time_casa': df_base.iloc[-1]['time_casa'],
         'time_fora': df_base.iloc[-1]['time_fora']
     }, 1.50, 1.90, 0.75, "Vá à aba 'Cartões' e selecione 'Mais de 4.5'.")
 
-    print("\n" + "="*50)
-    print("Pipeline de Produção V2 Finalizado com Sucesso.")
+    print("\nAnálise concluída.")
+
+def iniciar_bot_interativo():
+    """
+    Loop de escuta para comandos do Telegram.
+    """
+    print(f"🤖 Bot Betting AI Ativo! Aguardando o comando /analisar no Telegram...")
+    last_update_id = 0
+    
+    while True:
+        try:
+            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates"
+            params = {"offset": last_update_id + 1, "timeout": 30}
+            response = requests.get(url, params=params).json()
+            
+            for update in response.get("result", []):
+                last_update_id = update["update_id"]
+                message = update.get("message", {})
+                text = message.get("text", "")
+                chat_id = message.get("chat", {}).get("id")
+                
+                if text == "/analisar":
+                    print(f"📥 Comando recebido de {chat_id}. Iniciando processamento...")
+                    requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", json={
+                        "chat_id": chat_id,
+                        "text": "🚀 *Comando recebido!* Iniciando análise profunda dos 3 cérebros... Aguarde.",
+                        "parse_mode": "Markdown"
+                    })
+                    executar_pipeline_v2()
+                    
+            time.sleep(1)
+            
+        except Exception as e:
+            print(f"Erro no loop do bot: {e}")
+            time.sleep(5)
 
 if __name__ == "__main__":
-    executar_pipeline_v2()
+    # Verifica se deve rodar o bot ou apenas uma análise
+    if len(sys.argv) > 1 and sys.argv[1] == "--once":
+        executar_pipeline_v2()
+    else:
+        iniciar_bot_interativo()
