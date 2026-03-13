@@ -41,6 +41,6 @@ def criar_features_disciplinares(df_jogadores, arbitro_stats):
     if df_jogadores.empty: return pd.DataFrame()
     
     # Agrupar faltas por time/jogo
-    agressividade = df_jogadores.groupby('fixture_id')['faltas_cometidas'].sum().reset_index()
+    agressividade = df_jogadores.groupby('id_jogo')['faltas_cometidas'].sum().reset_index()
     # Adicionar dado do árbitro aqui
     return agressividade
