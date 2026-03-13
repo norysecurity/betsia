@@ -63,9 +63,9 @@ def criar_menu_principal():
     markup.add(item1, item2, item3)
     return markup
 
-@bot.message_handler(commands=['start'])
+@bot.message_handler(commands=['start', 'menu'])
 def enviar_boas_vindas(message):
-    print(f"👤 Comando /start recebido de {message.from_user.first_name}")
+    print(f"👤 Comando {message.text} recebido de {message.from_user.first_name}")
     welcome_text = (
         "🤖 *Sniper Betting AI V9 Ativado!*\n\n"
         "Selecione uma opção no menu abaixo para começar:\n\n"
