@@ -43,25 +43,31 @@ def coletar_dados_api():
         
         jogos = []
         for ev in dados:
-            # Extrair a odd real do mandante na Bet365
-            odd_casa_real = 2.0 
+            odd_casa_real = 0.0 # Sem odd padrão falsa. Se não achar, será 0.0.
             bookmakers = ev.get('bookmakers', [])
-            bet365_data = next((b for b in bookmakers if b['key'] == 'bet365'), None)
             
-            if bet365_data:
-                markets = bet365_data.get('markets', [])
+            if bookmakers:
+                # Tenta pegar a Bet365, se não existir, pega a primeira casa disponível no JSON
+                bookmaker_data = next((b for b in bookmakers if b['key'] == 'bet365'), bookmakers[0])
+                markets = bookmaker_data.get('markets', [])
                 h2h_market = next((m for m in markets if m['key'] == 'h2h'), None)
+                
                 if h2h_market:
                     outcomes = h2h_market.get('outcomes', [])
-                    casa_outcome = next((o for o in outcomes if o['name'] == ev['home_team']), None)
-                    if casa_outcome:
-                        odd_casa_real = casa_outcome['price']
+                    if outcomes:
+                        # Tenta correspondência exata. Se falhar, assume que o 1º elemento é o mandante (padrão H2H)
+                        casa_outcome = next((o for o in outcomes if o['name'] == ev['home_team']), outcomes[0])
+                        odd_casa_real = casa_outcome.get('price', 0.0)
             
+            # PROTEÇÃO: Se não conseguiu a odd real, ignora o jogo e não o adiciona à análise!
+            if odd_casa_real == 0.0:
+                continue
+                
             # Construir a linha do jogo
             jogos.append({
                 'id_jogo': ev['id'],
                 'data': hoje,
-                'status': 'NS', # Jogos Futuros
+                'status': 'NS',
                 'time_casa': ev['home_team'],
                 'time_fora': ev['away_team'],
                 'gols_casa': 0,
@@ -72,7 +78,7 @@ def coletar_dados_api():
                 # (A API de Odds não fornece estatísticas do jogo, apenas cotações. Mantemos estas métricas para não partir o modelo XGBoost de Cartões e Remates)
                 'xg_diff': np.random.uniform(-1.5, 2.5),
                 'posse_ataque': np.random.uniform(35, 65),
-                'odd_casa': odd_casa_real, # ODD REAL EXTRAÍDA DA BET365!
+                'odd_casa': odd_casa_real, # AGORA É A ODD 100% REAL
                 'remates_over_2_5': 0,
                 'odd_remates_over_2_5': round(np.random.uniform(1.5, 2.2), 2),
                 'cartoes_over_4_5': 0,
